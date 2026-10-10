@@ -1,5 +1,5 @@
 //
-//  ContentView.swift
+//  RootView.swift
 //  CoordinatorPattern
 //
 //  Created by Sudheshna on 3/10/2026.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct ContentView: View {
+struct RootView: View {
     /*
         @EnvironmentObject: grabs the ONE Presenter that the App put in the environment
         (CoordinatorPatternApp: .environmentObject(presenter)).
@@ -79,7 +79,7 @@ struct ContentView: View {
                }
 
         /*
-         .onAppear: runs when ContentView first shows.
+         .onAppear: runs when RootView first shows.
          - The stack starts EMPTY (Presenter: = []), so we push the first screen here.
          - isEmpty check: prevents pushing .splash again if onAppear fires a second time.
          */
@@ -91,7 +91,7 @@ struct ContentView: View {
     }
 }
 #Preview {
-    ContentView()
+    RootView()
         .environmentObject(Presenter())
 }
 
