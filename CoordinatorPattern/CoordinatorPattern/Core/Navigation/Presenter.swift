@@ -114,7 +114,7 @@ SwiftUI
      dismissAll: close EVERYTHING, so only the base layer (the map) shows.
      - sheet = nil: closes the bottom sheet (Signup slides down).
      - fullScreenStack = []: removes every full screen (Welcome slides out).
-     - The map isn't in the stack, it lives in ContentView's ZStack
+     - The map isn't in the stack, it lives in RootView's ZStack
        underneath, so it's what's left on screen.
 
      Difference from the others:

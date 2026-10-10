@@ -8,11 +8,24 @@
 import SwiftUI
 
 struct UrgentView: View {
+    @EnvironmentObject private var presenter: Presenter
+
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        VStack(spacing: 20) {
+                    Text("Urgent")
+                        .font(.largeTitle.bold())
+
+                    // dismiss(): closes the sheet -> back to map + Home buttons
+                    Button("Close") {
+                        presenter.dismiss()
+                    }
+                    .buttonStyle(.bordered)
+                }
     }
 }
 
 #Preview {
     UrgentView()
+        .environmentObject(Presenter())
+
 }

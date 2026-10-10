@@ -8,7 +8,7 @@
 import SwiftUI
 /*
  SignupView: shown as a BOTTOM SHEET (.signup.isFullScreen == false).
- - It can read the Presenter because ContentView passes
+ - It can read the Presenter because RootView passes
    .environmentObject(presenter) into the .sheet (Step 4).
  */
 
@@ -41,7 +41,7 @@ struct SignupView: View {
                         dismissAll() (Step C) clears everything:
                         - sheet = nil          -> Signup slides down
                         - fullScreenStack = [] -> Welcome slides out to the right
-                        Nothing covers ContentView's base layer -> the map shows.
+                        Nothing covers RootView's base layer -> the map shows.
                         */
                        Button("Go to Map") {
                            presenter.dismissAll()

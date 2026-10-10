@@ -13,8 +13,12 @@ struct RootView: View {
         (CoordinatorPatternApp: .environmentObject(presenter)).
         - No initializer argument needed.
         - If you forget .environmentObject(...) higher up, the app CRASHES here.
+     
+     NEW: AuthService from the environment (CoordinatorPatternApp injects it).
+         RootView is the ONE place that routes on auth changes
         */
     @EnvironmentObject private var presenter: Presenter
+    @EnvironmentObject private var authService: AuthService
     
    
     var body: some View {
@@ -37,6 +41,20 @@ struct RootView: View {
                          - Created at launch, so it's already loaded when revealed (no blank flash).
                          */
                         MapView()
+            /*
+                         NEW: HOME PANEL
+                         VStack + Spacer pushes HomeView to the BOTTOM of the screen.
+                         - Like MapView, it's NOT a Destination: always present, never dismissed.
+                         - Placed BEFORE the ForEach, so Splash / Welcome (full screens)
+                           cover it. The user only sees it once the stack is empty
+                           (after "Go to Map" -> dismissAll()).
+                         - The Spacer's empty area doesn't catch touches, so you can
+                           still pan and zoom the map above the panel.
+                         */
+                        VStack {
+                            Spacer()
+                            HomeView()
+                        }
             /*
              ForEach over the stack: draws one view per Destination.
              - Works because Destination is Identifiable (the `id` from Step 2).
@@ -76,6 +94,17 @@ struct RootView: View {
         .sheet(item: presenter.sheetBinding) { destination in
                    destination.view
                        .environmentObject(presenter)
+                       .environmentObject(authService)
+            /*
+                            NEW
+                            .interactiveDismissDisabled(true) turns OFF drag-to-dismiss.
+                            - We pass the OPPOSITE of isDragToDismissEnabled:
+                                enabled == false -> disabled(true)  -> can't drag
+                                enabled == true  -> disabled(false) -> can drag
+                            - The sheet can still be closed in code (presenter.dismiss()),
+                              which is what the Close button does.
+                            */
+                           .interactiveDismissDisabled(!destination.isDragToDismissEnabled)
                }
 
         /*
@@ -83,15 +112,47 @@ struct RootView: View {
          - The stack starts EMPTY (Presenter: = []), so we push the first screen here.
          - isEmpty check: prevents pushing .splash again if onAppear fires a second time.
          */
+        
         .onAppear {
             if presenter.fullScreenStack.isEmpty {
                 presenter.present(.splash)
             }
         }
+        .onChange(of: authService.state) { oldState, newState in
+                   print("🧭 auth state:", oldState, "->", newState)
+                   route(for: newState)
+        }
     }
+    /*
+        route: auth state -> screens. The same switch Latest's RootViewModel does.
+        replaceAll / dismissAll also close any open sheet (they set sheet = nil).
+        */
+       private func route(for state: AuthState) {
+           switch state {
+           case .authenticated:
+               // Login succeeded -> remove Welcome + Login, show map + Home
+               presenter.dismissAll()
+
+           case .unauthenticated:
+               // Logged out -> fresh start at Welcome (no going "back" into the app)
+               presenter.replaceAll(with: .welcome)
+
+           case .sessionExpired:
+               /*
+                Refresh token died -> straight to Login (Latest: presentReauth()).
+                Welcome goes underneath, so Login's back button
+                lands on Welcome, not on the map of a logged-out user.
+                */
+               presenter.replaceAll(with: .welcome)
+               presenter.present(.login)
+           }
+       }
+    
 }
 #Preview {
     RootView()
         .environmentObject(Presenter())
+        .environmentObject(LocationService())
+        .environmentObject(AuthService())// NEW
 }
 

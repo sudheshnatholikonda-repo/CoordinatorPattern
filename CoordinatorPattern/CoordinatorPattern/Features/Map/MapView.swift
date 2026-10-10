@@ -6,86 +6,144 @@
 //
 
 
+//
+//  MapView.swift
+//  CoordinatorPattern
+//
+
 import SwiftUI
 import GoogleMaps
+import CoreLocation
 
 /*
  MapView: the SwiftUI screen that shows the map.
- - This is what ContentView will put at the BASE of its ZStack (Step D).
- - It is NOT a Destination: it's never pushed or dismissed,
-   it's always there underneath the screens.
- - Same structure as Latest: an outer SwiftUI View + an inner
-   UIViewRepresentable that holds the real GMSMapView.
- - The ZStack is where you'll add buttons on top of the map later
-   (Latest puts its mapControls here).
+ - The BASE layer of RootView's ZStack (never pushed or dismissed).
+ - Same structure as Latest: outer SwiftUI View + inner UIViewRepresentable.
  */
 struct MapView: View {
+
+    /*
+     NEW: the shared LocationService (the App put it in the environment, Step 2).
+     Because it's an ObservableObject, MapView redraws whenever
+     `location` or `authorizationStatus` changes, which calls
+     MapGMSView.updateUIView with the new values.
+     */
+    @EnvironmentObject private var locationService: LocationService
+
     var body: some View {
         ZStack {
-            MapGMSView()
-                .ignoresSafeArea()   // map fills the whole screen, behind the notch/home bar
+            /*
+             Pass the values DOWN into the UIKit map.
+             MapGMSView doesn't read the environment itself; it just gets
+             plain values, which keeps it simple.
+             */
+            MapGMSView(
+                userLocation: locationService.location,
+                isLocationAllowed: locationService.isAuthorized
+            )
+            .ignoresSafeArea()
+        }
+        /*
+         NEW: ask for permission when the map first appears.
+         - First launch: shows the iOS popup (text from Info.plist, Step 1).
+         - Already allowed: starts GPS updates straight away.
+         - Denied: does nothing.
+         */
+        .onAppear {
+            locationService.requestPermission()
         }
     }
 }
 
 /*
- MapGMSView: a bridge from UIKit to SwiftUI.
- - GMSMapView is a UIKit view (UIView); SwiftUI can't show UIViews directly.
- - UIViewRepresentable is Apple's adapter: you tell SwiftUI how to
-   CREATE the UIView (makeUIView) and how to UPDATE it (updateUIView).
- - private: only MapView uses it (same as Latest).
- - @MainActor: UIKit views must be created on the main thread.
+ MapGMSView: bridge from UIKit (GMSMapView) to SwiftUI.
  */
 @MainActor
 private struct MapGMSView: UIViewRepresentable {
 
     /*
-     makeUIView: called ONCE, when SwiftUI first shows this view.
-     Build and configure the GMSMapView here.
-     - The API key must ALREADY be set (AppDelegate does that at launch),
-       otherwise this line crashes.
+     NEW: inputs from MapView.
+     - userLocation: latest GPS position (nil until the first fix).
+     - isLocationAllowed: did the user tap "Allow"?
+     */
+    let userLocation: CLLocation?
+    let isLocationAllowed: Bool
+
+    /*
+     NEW: makeCoordinator creates a small helper object that SwiftUI keeps
+     alive for as long as the map exists.
+     We use it to REMEMBER "have we already centred on the user?".
+     (A struct like MapGMSView is recreated on every redraw, so it can't remember.)
+
+     ⚠️ Name clash: this "Coordinator" is SwiftUI's term for a
+     UIViewRepresentable helper. It has NOTHING to do with your Coordinator
+     navigation pattern (Presenter / Destination).
+     */
+    func makeCoordinator() -> MapCoordinator {
+        MapCoordinator()
+    }
+
+    /*
+     makeUIView: called ONCE. Build the map with a starting camera.
+     Sydney is just the starting view until the user's location arrives.
      */
     func makeUIView(context: Context) -> GMSMapView {
-        /*
-         GMSMapViewOptions: the map's starting settings (Latest uses this too).
-         camera: where the map starts looking.
-         - latitude/longitude: change these to your city.
-           (Example: Sydney.)
-         - zoom: 1 = whole world, 15 = streets, 20 = buildings.
-         */
         let options = GMSMapViewOptions()
         options.camera = GMSCameraPosition.camera(
             withLatitude: -33.8688,
             longitude: 151.2093,
             zoom: 12
         )
-
-        let mapView = GMSMapView(options: options)
-
-        /*
-         Turn off Google's built-in location dot and button for now.
-         (Latest does the same; turning them on needs location permission,
-         which we haven't set up.)
-         */
-        mapView.isMyLocationEnabled = false
-        mapView.settings.myLocationButton = false
-
-        return mapView
+        return GMSMapView(options: options)
     }
 
     /*
-     updateUIView: called whenever SwiftUI redraws this view.
-     - Empty for now: nothing from SwiftUI changes the map yet.
-     - Later: move the camera, add markers, etc. here (or through a ViewModel, like Latest).
+     updateUIView: called on EVERY redraw, i.e. every time LocationService
+     publishes a new location or permission.
      */
-    func updateUIView(_ uiView: GMSMapView, context: Context) {}
+    func updateUIView(_ mapView: GMSMapView, context: Context) {
+        /*
+         Blue dot + "my location" button (bottom-right),
+         only once the user has allowed location.
+         - isMyLocationEnabled: Google draws the blue dot itself.
+         - myLocationButton: tap it to jump back to the user.
+         (Latest turns these OFF because it draws its own avatar marker.)
+         */
+        mapView.isMyLocationEnabled = isLocationAllowed
+        mapView.settings.myLocationButton = isLocationAllowed
+
+        /*
+         Move the camera to the user ONCE (on the first GPS fix).
+         - If we did this on every update, the map would keep snapping back
+           while the user is trying to pan around.
+         - context.coordinator.hasCenteredOnUser remembers it across redraws.
+         - animate(to:): smooth fly-over instead of a jump.
+         - zoom 15 = street level.
+         */
+        guard let userLocation, !context.coordinator.hasCenteredOnUser else { return }
+        context.coordinator.hasCenteredOnUser = true
+        mapView.animate(to: GMSCameraPosition.camera(
+            withTarget: userLocation.coordinate,
+            zoom: 15
+        ))
+    }
+
+    /*
+     MapCoordinator: the "memory" object for this map (see makeCoordinator).
+     final class: one instance, kept alive by SwiftUI.
+     */
+    final class MapCoordinator {
+        var hasCenteredOnUser = false
+    }
 }
 
 /*
- Preview: Google Maps usually shows grey or blank in Xcode previews
- because AppDelegate (which sets the API key) doesn't run there.
- Test the map in the Simulator instead (⌘R).
+ Preview needs a LocationService too, or it crashes
+ (@EnvironmentObject has nothing to read).
+ The map itself may be grey here; test in the Simulator.
  */
 #Preview {
     MapView()
+        .environmentObject(LocationService())
 }
+

@@ -29,10 +29,19 @@ struct CoordinatorPatternApp: App {
          - private: only the App owns it; others get it through the environment (below).
          */
         @StateObject private var presenter = Presenter()
+    /*
+         NEW: ONE LocationService for the whole app.
+         @StateObject: created once, kept alive (same reason as Presenter).
+         */
+        @StateObject private var locationService = LocationService()
+        @StateObject private var authService = AuthService()
+        init() {
+           FreshInstallCleaner.purgeKeychainIfFreshInstall()
+        }
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
             /*
                         .environmentObject: puts the Presenter into the SwiftUI environment.
                         Every view BELOW this one can now grab it with:
@@ -40,6 +49,8 @@ struct CoordinatorPatternApp: App {
                         No need to pass it through every initializer by hand.
                         */
                            .environmentObject(presenter)
+                           .environmentObject(locationService)
+                           .environmentObject(authService)
         }
     }
 }
